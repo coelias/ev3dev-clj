@@ -19,6 +19,10 @@ class Device:
         except IOError:
             return None
 
+    def setattr(self,name,value):
+        with open(os.path.join(self.path,name), "w") as fil:
+            fil.write(str(value))
+
     def update_value(self):
         newvalue=self.calculate_values()
 
@@ -30,6 +34,40 @@ class Device:
     def vals8(self,fns=[int]*8):
         return [self.getattr("value{}".format(i), fns[i]) for i in range(8)]
 
+class TachoMotor(Device):
+    def __init__(self, *args):
+        Device.__init__(self,*args)
+
+    def calculate_values(self):
+        {"state": self.getattr("state"), "speed": self.getattr("speed", int), "position": self.getattr("postion",int)}
+
+    def set_speed(self, speed):
+        self.setattr("speed_sp",speed)
+
+    def stop(self):
+        self.setattr("command","stop")
+
+    def stop_action(self, action):
+        self.setattr("stop_action",action)
+
+    def reset(self):
+        self.setattr("command","reset")
+
+    def run_timed(self,ms):
+        self.setattr("time_sp",ms)
+        self.setattr("command","run-times")
+
+    def run_forever(self,speed):
+        self.setattr("command","run-forever")
+
+    def run_to_abs_pos(self, pos):
+        self.setattr("position_sp",pos)
+        self.setattr("command","run-to-abs-pos")
+
+    def run_to_rel_pos(self, pos):
+        self.setattr("position_sp",pos)
+        self.setattr("command","run-to-rel-pos")
+
 class Sensor(Device):
     def __init__(self, *args):
         Device.__init__(self,*args)
@@ -39,8 +77,7 @@ class Sensor(Device):
 
     def set_mode(self, mode):
         if mode in self.modes: 
-            with open(os.path.join(self.path,"mode"), "w") as fil:
-                fil.write(mode)
+            self.setattr("mode",mode)
 
     def __str__(self):
         return json.dumps({"port": self.port, "sensor": self.NAME, "values": self.value, "mode": self.getattr("mode")})
@@ -81,7 +118,8 @@ class DeviceFinder():
     DEVMAP = {"lego-ev3-gyro": GyroSensor,
               "lego-ev3-color": ColorSensor,
               "lego-ev3-us": USSensor,
-              "lego-ev3-touch": TouchSensor}
+              "lego-ev3-touch": TouchSensor,
+              "lego-ev3-l-motor": TachoMotor}
 
     SENSORS_PATH="/sys/class/lego-sensor/"
     TACHO_MOTORS_PATH="/sys/class/tacho-motor/"
@@ -108,8 +146,13 @@ class DeviceFinder():
                 self.devs.append(self.DEVMAP[dn](i))
 
     def run_action(self,port, op, **kwargs):
-        device = self.portmap[port]
-        getattr(device,op)(**kwargs)
+        if type(port)==int:
+            device = self.portmap[port]
+            getattr(device,op)(**kwargs)
+        else:
+            for i in port:
+                device = self.portmap[i]
+                getattr(device,op)(**kwargs)
 
 
     def updateValues(self):
