@@ -3,6 +3,15 @@ import time
 import sys
 import json
 import threading
+from ev3dev2.sound import Sound
+
+SND=Sound()
+
+def play_music(notes):
+    SND.tone(notes)
+
+def play_audio(audio):
+    os.system("aplay -q audios/"+audio+".wav")
 
 class Device:
     def __init__(self,path):
@@ -35,11 +44,13 @@ class Device:
         return [self.getattr("value{}".format(i), fns[i]) for i in range(8)]
 
 class TachoMotor(Device):
+    NAME="tacho"
     def __init__(self, *args):
         Device.__init__(self,*args)
+        self.port = self.getattr("address",lambda x: x.split(":out")[1])
 
     def calculate_values(self):
-        {"state": self.getattr("state"), "speed": self.getattr("speed", int), "position": self.getattr("postion",int)}
+        return {"state": self.getattr("state"), "speed": self.getattr("speed", int), "position": self.getattr("position",int)}
 
     def set_speed(self, speed):
         self.setattr("speed_sp",speed)
@@ -57,7 +68,7 @@ class TachoMotor(Device):
         self.setattr("time_sp",ms)
         self.setattr("command","run-times")
 
-    def run_forever(self,speed):
+    def run_forever(self):
         self.setattr("command","run-forever")
 
     def run_to_abs_pos(self, pos):
@@ -67,6 +78,11 @@ class TachoMotor(Device):
     def run_to_rel_pos(self, pos):
         self.setattr("position_sp",pos)
         self.setattr("command","run-to-rel-pos")
+
+    def __str__(self):
+        data={"port": self.port, "motor": self.NAME, }
+        data.update(self.value)
+        return json.dumps(data)
 
 class Sensor(Device):
     def __init__(self, *args):
@@ -145,14 +161,16 @@ class DeviceFinder():
                 self.portmap[device.port]=device
                 self.devs.append(self.DEVMAP[dn](i))
 
-    def run_action(self,port, op, **kwargs):
-        if type(port)==int:
+    def run_action(self,op, port=None, delay=None, **kwargs):
+        if op=="music":
+            play_music(**kwargs)
+        elif op=="audio":
+            play_audio(**kwargs)
+        else:
             device = self.portmap[port]
             getattr(device,op)(**kwargs)
-        else:
-            for i in port:
-                device = self.portmap[i]
-                getattr(device,op)(**kwargs)
+            if delay:
+                time.sleep(delay)
 
 
     def updateValues(self):
@@ -164,7 +182,7 @@ class DeviceFinder():
 devs=DeviceFinder()
 devs.findDevices()
 
-SAMPLING=0.05
+SAMPLING=0.01
 RUNNING=True
 
 def print_info():
@@ -183,13 +201,17 @@ def process_action(data):
     try:
         data=json.loads(data)
     except:
-        sys.stdout.write("; Input not a JSON: {}".format(data)
+        sys.stdout.write("; Input not a JSON: {}".format(data))
         sys.stdout.flush()
         return
     try:
-        devs.run_action(**data)   
+        if type(data) == list:
+            for i in data:
+                devs.run_action(**i)
+        elif type(data) == dict:
+            devs.run_action(**data)    
     except:
-        sys.stdout.write("; Error with action = {}".format(data)
+        sys.stdout.write("; Error with action = {}".format(data))
         sys.stdout.flush()
 
 
