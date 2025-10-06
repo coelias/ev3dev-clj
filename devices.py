@@ -84,6 +84,61 @@ class TachoMotor(Device):
         data.update(self.value)
         return json.dumps(data)
 
+class TachoDual(Device):
+    NAME="tachoDual"
+    def __init__(self, tacho1, tacho2):
+        Device.__init__(self,"")
+        self.path1 = tacho1.path
+        self.path2 = tacho2.path
+
+    def getattr(self,path, name, f=None):
+        try:
+            with open(os.path.join(path,name)) as fil:
+                if f:
+                    return f(fil.read().strip())
+                else:
+                    return fil.read().strip()
+        except IOError:
+            return None
+
+    def setattr(self,name,value1, value2):
+        with open(os.path.join(self.path1,name), "w") as fil:
+            with open(os.path.join(self.path2,name), "w") as fil2:
+                fil.write(str(value1))
+                fil2.write(str(value2))
+
+    def set_speed(self, speed1, speed2):
+        self.setattr("speed_sp",speed1, speed2)
+
+    def stop(self):
+        self.setattr("command","stop", "stop")
+
+    def stop_action(self, action):
+        self.setattr("stop_action",action, action)
+
+    def reset(self):
+        self.setattr("command","reset","reset")
+
+    def run_timed(self,ms):
+        self.setattr("time_sp",ms,ms)
+        self.setattr("command","run-timed","run-timed")
+
+    def run_forever(self):
+        self.setattr("command","run-forever","run-forever")
+
+    def run_to_abs_pos(self, pos):
+        self.setattr("position_sp",pos,pos)
+        self.setattr("command","run-to-abs-pos","run-to-abs-pos")
+
+    def run_to_rel_pos(self, pos, pos2=None):
+        self.setattr("position_sp",pos,pos2 or pos)
+        self.setattr("command","run-to-rel-pos","run-to-rel-pos")
+
+    def __str__(self):
+        data={"port": self.port, "motor": self.NAME, }
+        data.update(self.value)
+        return json.dumps(data)
+
 class Sensor(Device):
     def __init__(self, *args):
         Device.__init__(self,*args)
@@ -160,6 +215,12 @@ class DeviceFinder():
                 device = self.DEVMAP[dn](i)
                 self.portmap[device.port]=device
                 self.devs.append(self.DEVMAP[dn](i))
+
+        if self.portmap["A"] and self.portmap["A"].NAME=="tacho" and self.portmap["D"] and self.portmap["D"].NAME=="tacho":
+               self.portmap["A,D"] = TachoDual(self.portmap["A"], self.portmap["D"])
+               del self.portmap["A"]
+               del self.portmap["D"]
+                
 
     def run_action(self,op, port=None, delay=None, **kwargs):
         if op=="music":
